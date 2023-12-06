@@ -33,31 +33,28 @@ almanac(Seeds, Maps) -->
 
 apply_maps([], N, N).
 apply_maps([M|Ms], N0, N) :-
-    apply_map(M, N0, N1),
+    map_in_out(M, N0, N1),
     apply_maps(Ms, N1, N).
 
-apply_map(M, N0, N) :-
+map_in_out(M, N0, N) :-
     M = map(_, Ranges),
-    (   include(valid_range(N0), Ranges, [range(dest_range_start(DRS),
-                                                src_range_start(SRS),
-                                                range_len(_))|Rs])
-    ->  (   Rs = []
-        ->  RangePos #= N0 - SRS,
-            N #= DRS + RangePos
-        ;   throw('Two ranges matching')
-        )
-    ;   N0 = N
-    ).
+    maplist(in_range(N0, N), InRanges, Ranges),
+    foldl([P,Q,R]>>(P #\ Q #<==> R), InRanges, 0, InRange),
+    InRange #\ N0 #= N.
+    
 
-valid_range(N, range(dest_range_start(_),
-                     src_range_start(SRS),
-                     range_len(RL)))
+in_range(N0, N, InRange, range(dest_range_start(DRS),
+                               src_range_start(SRS),
+                               range_len(RL)))
 :-
-    N #>= SRS,
-    N #< SRS + RL.
+    L0 #= SRS,
+    U0 #= SRS + RL - 1,
+    InRange #<==> N0 in L0..U0,
+    RangeDiff #= N0 - L0,
+    InRange #==> N #= DRS + RangeDiff.
 
 solve1(X) :-
-    phrase_from_file(almanac(Seeds, Maps), 'input.txt'),
+    phrase_from_file(almanac(Seeds, Maps), 'small_input.txt'),
     maplist(apply_maps(Maps), Seeds, Locations),
     min_list(Locations, X).
 
@@ -65,21 +62,35 @@ solve1(X) :-
 % Part 2
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-seedrange_seeds(_, 0, []).
-seedrange_seeds(Start0, Nb0, [Start|Ss]) :-
-    Start #= Start0 + 1,
-    Nb #= Nb0 - 1,
-    seedrange_seeds(Start, Nb, Ss).
+seedranges_domain(SRs, D, Div) :-
+    seedranges_domains_(SRs, Ds, Div),
+    SRs=[Start|_],
+    foldl([X, Y, X\/Y]>>true, Ds, Start, D).
 
-seedranges_bags([], []).
-seedranges_bags([Start, Nb|Ranges], [S|Ss]) :-
-    seedrange_seeds(Start, Nb, S),
-    seedranges_bags(Ranges, Ss).
+seedranges_domains_([], [], _).
+seedranges_domains_([Start, Length|Rest], [D|Ds], Div) :-
+    End #= Start + Length - 1,
+    D = Start..End,
+    seedranges_domains_(Rest, Ds, Div).
 
-solve2(X) :-
+seed_generator(Mult, Seed) :-
+    Seed #>= 0,
+    Seed #=< 6000000000,
+    Seed #= _ * Mult.
+
+solve2(Seed, Location, Div) :-
     phrase_from_file(almanac(SRs, Maps), 'input.txt'),
-    seedranges_bags(SRs, Bags),
-    append(Bags, Seeds),
-    maplist(apply_maps(Maps), Seeds, Locations),
-    min_list(Locations, X).
+    seedranges_domain(SRs, D, Div),
+    Seed in D,
+    Location in 0..2008895,
+    apply_maps(Maps, Seed, Location).
     
+% ?- findall(Seed-Location, (seed_generator(100000, Seed), indomain(Seed), solve2(Seed, Location, _)), SLs).
+% SLs = [4076400000-2008895, 4076500000-2108895, 4076600000-2208895, 4076700000-2308895, 4076800000-2408895, 4076900000-2508895, 4077000000-2608895].
+
+% ?- solve2(Seed, Location, _), Seed #= 4076400000-80838.
+%false.
+
+%?- solve2(Seed, Location, _), Seed #= 4076400000-80837.
+%Seed = 4076319163,
+%Location = 1928058 
